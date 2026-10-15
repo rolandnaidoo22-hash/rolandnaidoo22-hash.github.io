@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "io.github.rolandnaidoo22hash.chessreview",
+    "sha256_cert_fingerprints": ["B8:1F:4A:D6:5B:5B:4B:6E:84:DC:39:53:59:50:06:5C:5F:ED:A6:62:9E:FC:C4:8F:78:7B:40:EC:7F:02:B1:04"]
+  }
+}]
