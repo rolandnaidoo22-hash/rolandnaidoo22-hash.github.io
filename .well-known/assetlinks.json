@@ -3,6 +3,6 @@
   "target": {
     "namespace": "android_app",
     "package_name": "io.github.rolandnaidoo22hash.chessreview",
-    "sha256_cert_fingerprints": ["B8:1F:4A:D6:5B:5B:4B:6E:84:DC:39:53:59:50:06:5C:5F:ED:A6:62:9E:FC:C4:8F:78:7B:40:EC:7F:02:B1:04"]
+    "sha256_cert_fingerprints": ["B8:1F:4A:D6:5B:5B:4B:6E:84:DC:39:53:59:50:06:5C:5F:ED:A6:62:9E:FC:C4:8F:78:7B:40:EC:7F:02:B1:04", "EF:67:9C:9A:E9:3A:AB:18:40:71:74:6A:B7:99:EA:04:CA:E2:F1:42:A9:D7:F8:9A:65:DE:A4:14:0A:85:EF:61"]
   }
 }]
