@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Screen Share</title>
+<style>
+  :root{--bg:#0f1115;--card:#1a1d24;--fg:#e8eaed;--mut:#9aa0a6;--acc:#4f8cff;--ok:#34c759;--bad:#ff453a}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh}
+  .wrap{max-width:560px;margin:0 auto;padding:24px 16px}
+  h1{font-size:22px;margin:0 0 4px}
+  p.sub{color:var(--mut);margin:0 0 20px;font-size:14px}
+  .card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:14px}
+  button{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer}
+  button.sec{background:#2b3039}
+  button.bad{background:var(--bad)}
+  button:disabled{opacity:.5;cursor:default}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  input[type=text]{width:100%;background:#0f1115;border:1px solid #2b3039;color:var(--fg);padding:10px;border-radius:8px;font-size:13px}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mut);margin-right:8px}
+  .dot.on{background:var(--ok)}
+  #qr{background:#fff;padding:10px;border-radius:10px;display:inline-block;margin-top:12px}
+  #qr:empty{display:none}
+  #viewer{position:fixed;inset:0;background:#000;display:none;align-items:center;justify-content:center}
+  #viewer video{width:100%;height:100%;object-fit:contain}
+  #vstatus{position:fixed;top:10px;left:10px;right:10px;text-align:center;color:#fff;font-size:14px;text-shadow:0 1px 3px #000;pointer-events:none}
+  #vbtns{position:fixed;bottom:16px;left:0;right:0;display:flex;gap:8px;justify-content:center}
+  .small{font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+
+<!-- SHARER (your laptop) -->
+<div class="wrap" id="sharer" style="display:none">
+  <h1>Share my screen</h1>
+  <p class="sub">Start sharing here, then open the link on your phone. Keep this tab open (it can be in the background).</p>
+
+  <div class="card">
+    <div><span class="dot" id="sdot"></span><span id="sstate">Not sharing</span></div>
+    <div class="row">
+      <button id="startBtn">Start sharing</button>
+      <button id="stopBtn" class="bad" style="display:none">Stop</button>
+      <button id="recBtn" class="sec" style="display:none">Record</button>
+    </div>
+  </div>
+
+  <div class="card" id="linkCard" style="display:none">
+    <div class="small" style="margin-bottom:6px">Open this on your phone</div>
+    <input type="text" id="link" readonly>
+    <div class="row"><button class="sec" id="copyBtn">Copy link</button></div>
+    <div id="qr"></div>
+    <div class="small" style="margin-top:10px">Anyone with this link can ask to watch. You approve each viewer below. The link changes every time you start sharing.</div>
+  </div>
+
+  <div class="card" id="reqCard" style="display:none">
+    <div class="small" style="margin-bottom:6px">Viewer requests</div>
+    <div id="reqs"></div>
+  </div>
+</div>
+
+<!-- VIEWER (your phone) -->
+<div id="viewer">
+  <video id="vid" autoplay playsinline muted></video>
+  <div id="vstatus">Connecting…</div>
+  <div id="vbtns">
+    <button class="sec" id="fsBtn">Fullscreen</button>
+    <button class="sec" id="retryBtn" style="display:none">Reconnect</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(function(){
+  var $ = function(id){return document.getElementById(id)};
+  var hash = location.hash.replace('#','');
+  var isViewer = /^scr-[a-z0-9]{12,}$/.test(hash);
+  var PEER_OPTS = {config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}};
+
+  if (isViewer) startViewer(hash); else startSharer();
+
+  /* ---------- Viewer ---------- */
+  function startViewer(id){
+    $('viewer').style.display='flex';
+    var vid=$('vid'), st=$('vstatus'), peer, call;
+    function connect(){
+      $('retryBtn').style.display='none';
+      st.textContent='Waiting for the laptop to approve…';
+      if(peer) try{peer.destroy()}catch(e){}
+      peer = new Peer(PEER_OPTS);
+      peer.on('open', function(){
+        // Empty "dummy" stream so the call can be placed; we only receive.
+        var c=document.createElement('canvas'); c.width=c.height=2;
+        c.getContext('2d').fillRect(0,0,2,2);
+        call = peer.call(id, c.captureStream(1));
+        call.on('stream', function(s){ vid.srcObject=s; st.textContent=''; vid.play().catch(function(){}); });
+        call.on('close', function(){ st.textContent='Sharing stopped.'; $('retryBtn').style.display=''; });
+        call.on('error', function(){ st.textContent='Connection error.'; $('retryBtn').style.display=''; });
+      });
+      peer.on('error', function(e){
+        st.textContent = (e.type==='peer-unavailable') ? 'Laptop is not sharing right now.' : 'Error: '+e.type;
+        $('retryBtn').style.display='';
+      });
+    }
+    $('retryBtn').onclick=connect;
+    $('fsBtn').onclick=function(){
+      var el=document.documentElement;
+      (el.requestFullscreen||el.webkitRequestFullscreen||function(){vid.webkitEnterFullscreen&&vid.webkitEnterFullscreen()}).call(el);
+    };
+    connect();
+  }
+
+  /* ---------- Sharer ---------- */
+  function startSharer(){
+    $('sharer').style.display='block';
+    var stream=null, peer=null, calls=[], recorder=null, chunks=[];
+
+    function rid(){
+      var a=new Uint8Array(10); crypto.getRandomValues(a);
+      return 'scr-'+Array.from(a,function(b){return (b%36).toString(36)}).join('')+'xy';
+    }
+    function setState(on, txt){ $('sdot').className='dot'+(on?' on':''); $('sstate').textContent=txt; }
+
+    $('startBtn').onclick=async function(){
+      try{
+        stream = await navigator.mediaDevices.getDisplayMedia({video:{frameRate:15},audio:false});
+      }catch(e){ setState(false,'Sharing cancelled'); return; }
+      stream.getVideoTracks()[0].onended=stop;
+      var id=rid();
+      peer=new Peer(id, PEER_OPTS);
+      peer.on('open', function(){
+        var link=location.href.split('#')[0]+'#'+id;
+        $('link').value=link;
+        $('linkCard').style.display='';
+        $('qr').innerHTML='';
+        try{ new QRCode($('qr'),{text:link,width:180,height:180}); }catch(e){}
+        setState(true,'Sharing — waiting for viewers');
+        $('startBtn').style.display='none'; $('stopBtn').style.display=''; $('recBtn').style.display='';
+      });
+      peer.on('call', function(call){ queueRequest(call); });
+      peer.on('error', function(e){ setState(false,'Error: '+e.type); });
+    };
+
+    function queueRequest(call){
+      $('reqCard').style.display='';
+      var row=document.createElement('div'); row.className='row';
+      row.innerHTML='<span style="align-self:center">A device wants to watch</span>';
+      var ok=document.createElement('button'); ok.textContent='Allow';
+      var no=document.createElement('button'); no.textContent='Deny'; no.className='sec';
+      row.appendChild(ok); row.appendChild(no); $('reqs').appendChild(row);
+      ok.onclick=function(){
+        call.answer(stream); calls.push(call);
+        row.innerHTML='<span class="small">Viewer connected</span>';
+        call.on('close',function(){ row.innerHTML='<span class="small">Viewer left</span>'; });
+      };
+      no.onclick=function(){ call.close(); row.remove(); };
+    }
+
+    function stop(){
+      if(recorder && recorder.state!=='inactive') recorder.stop();
+      calls.forEach(function(c){try{c.close()}catch(e){}}); calls=[];
+      if(peer){try{peer.destroy()}catch(e){}} peer=null;
+      if(stream){stream.getTracks().forEach(function(t){t.stop()}); stream=null;}
+      setState(false,'Not sharing');
+      $('startBtn').style.display=''; $('stopBtn').style.display='none'; $('recBtn').style.display='none';
+      $('linkCard').style.display='none'; $('reqCard').style.display='none'; $('reqs').innerHTML='';
+    }
+    $('stopBtn').onclick=stop;
+
+    $('copyBtn').onclick=function(){
+      $('link').select();
+      try{ navigator.clipboard.writeText($('link').value); }catch(e){ document.execCommand('copy'); }
+      $('copyBtn').textContent='Copied'; setTimeout(function(){$('copyBtn').textContent='Copy link'},1500);
+    };
+
+    $('recBtn').onclick=function(){
+      if(recorder && recorder.state==='recording'){ recorder.stop(); return; }
+      chunks=[];
+      recorder=new MediaRecorder(stream,{mimeType:'video/webm'});
+      recorder.ondataavailable=function(e){ if(e.data.size) chunks.push(e.data); };
+      recorder.onstop=function(){
+        var a=document.createElement('a');
+        a.href=URL.createObjectURL(new Blob(chunks,{type:'video/webm'}));
+        a.download='screen-'+new Date().toISOString().replace(/[:.]/g,'-')+'.webm';
+        a.click(); $('recBtn').textContent='Record';
+      };
+      recorder.start(1000); $('recBtn').textContent='Stop & save recording';
+    };
+  }
+})();
+</script>
+</body>
+</html>
