@@ -76,7 +76,10 @@
   var $ = function(id){return document.getElementById(id)};
   var hash = location.hash.replace('#','');
   var isViewer = /^scr-[a-z0-9]{12,}$/.test(hash);
-  var PEER_OPTS = {config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}};
+  var PEER_OPTS = {config:{iceServers:[
+    {urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},
+    {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
+  ]}};
 
   if (isViewer) startViewer(hash); else startSharer();
 
@@ -94,7 +97,13 @@
         var c=document.createElement('canvas'); c.width=c.height=2;
         c.getContext('2d').fillRect(0,0,2,2);
         call = peer.call(id, c.captureStream(1));
-        call.on('stream', function(s){ vid.srcObject=s; st.textContent=''; vid.play().catch(function(){}); });
+        call.on('stream', function(s){
+          vid.srcObject=s; vid.muted=true;
+          st.textContent='Connected, waiting for picture…';
+          vid.play().catch(function(){ st.textContent='Tap the screen to start'; });
+          var pc=call.peerConnection;
+          if(pc) pc.oniceconnectionstatechange=function(){ if(pc.iceConnectionState==='failed'||pc.iceConnectionState==='disconnected'){ st.textContent='Network link '+pc.iceConnectionState+' (try Reconnect)'; $('retryBtn').style.display=''; } };
+        });
         call.on('close', function(){ st.textContent='Sharing stopped.'; $('retryBtn').style.display=''; });
         call.on('error', function(){ st.textContent='Connection error.'; $('retryBtn').style.display=''; });
       });
@@ -103,6 +112,10 @@
         $('retryBtn').style.display='';
       });
     }
+    vid.addEventListener('playing', function(){ st.textContent=''; });
+    vid.addEventListener('resize', function(){ if(vid.videoWidth) st.textContent=''; });
+    document.addEventListener('click', function(){ if(vid.paused) vid.play().catch(function(){}); });
+    setInterval(function(){ if(vid.srcObject && !st.textContent && vid.videoWidth===0) st.textContent='No picture yet. On the laptop choose "Entire screen" and keep it visible.'; }, 4000);
     $('retryBtn').onclick=connect;
     $('fsBtn').onclick=function(){
       var el=document.documentElement;
