@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gmail Cleaner</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-title" content="Cleaner">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --muted:#667085; --line:#e4e7ec;
+    --accent:#2563eb; --accent-ink:#fff; --danger:#dc2626; --ok:#16a34a; --chip:#eef2ff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0f1218; --card:#181c24; --ink:#e7eaf0; --muted:#98a2b3; --line:#2a303c;
+      --accent:#3b82f6; --chip:#1e2640; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:860px;margin:0 auto;padding:16px;padding-top:max(16px, env(safe-area-inset-top))}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:8px 0 16px}
+  h1{font-size:22px;margin:0}
+  h2{font-size:17px;margin:0 0 10px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+  .muted{color:var(--muted)}
+  .small{font-size:13px}
+  button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:9px 14px;cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  button.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+  button:disabled{opacity:.5;cursor:default}
+  input[type=text],select{font:inherit;padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);width:100%}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+  .quick{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+  .quick .count{font-size:22px;font-weight:600}
+  .senders{width:100%;border-collapse:collapse}
+  .senders td{padding:8px 6px;border-top:1px solid var(--line);vertical-align:middle}
+  .senders td.n{text-align:right;font-weight:600;white-space:nowrap}
+  .senders .addr{font-size:12px;color:var(--muted);word-break:break-all}
+  .bar{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:12px 0 0;margin-top:8px}
+  #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 16px;border-radius:12px;display:none;gap:12px;align-items:center;max-width:calc(100% - 32px);z-index:10}
+  #toast button{background:transparent;color:var(--bg);border-color:var(--bg)}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
+  .modal{background:var(--card);border-radius:14px;padding:18px;max-width:440px;width:100%}
+  ol li{margin-bottom:8px}
+  code{background:var(--chip);padding:1px 6px;border-radius:6px;word-break:break-all}
+  .progress{height:6px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:8px}
+  .progress div{height:100%;width:0;background:var(--accent);transition:width .2s}
+  label.chk{display:flex;gap:8px;align-items:center}
+  .hidden{display:none !important}
+  /* phone */
+  button{min-height:44px}
+  input[type=checkbox]{width:22px;height:22px;flex:none}
+  input[type=text],select{min-height:44px;font-size:16px}
+  .senders tr{cursor:pointer}
+  .senders td{padding:12px 6px}
+  @media (max-width:600px){
+    .wrap{padding:12px 16px}
+    .grid{grid-template-columns:1fr 1fr;gap:10px}
+    .quick{padding:10px}
+    .quick .count{font-size:20px}
+    .quick button{padding:9px 6px;font-size:14px}
+    .row > button{flex:1}
+    #scanSize{width:100% !important}
+    .bar{padding-bottom:10px}
+    .bar button{flex:1 1 100%}
+    .modal-bg{align-items:flex-end;padding:0}
+    .modal{border-radius:16px 16px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom))}
+    .modal .row button{flex:1}
+    #toast{bottom:calc(16px + env(safe-area-inset-bottom))}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🧹 Gmail Cleaner</h1>
+    <div class="row">
+      <span id="who" class="muted small"></span>
+            <button id="signout" class="hidden">Sign out</button>
+    </div>
+  </header>
+
+  <!-- SETUP -->
+  <section id="setup" class="card hidden">
+    <h2>One-time setup (about 10 minutes)</h2>
+    <p class="muted">Google needs a "key" that says this page is allowed to ask for your Gmail. You only do this once.</p>
+    <ol>
+      <li>Go to <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">console.cloud.google.com/projectcreate</a>, name it <b>Gmail Cleaner</b>, click <b>Create</b>.</li>
+      <li>Open <a href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noopener">the Gmail API page</a> (make sure your new project is picked at the top) and click <b>Enable</b>.</li>
+      <li>Open <a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener">Google Auth Platform</a> and click <b>Get started</b>. App name: <b>Gmail Cleaner</b>, pick your email, choose <b>External</b>, finish.</li>
+      <li>In the left menu click <b>Audience</b>, under <b>Test users</b> click <b>Add users</b>, and add your own Gmail address.</li>
+      <li>In the left menu click <b>Clients</b> → <b>Create client</b>. Type: <b>Web application</b>. Under <b>Authorised JavaScript origins</b> click <b>Add URI</b> and paste:<br><code id="origin"></code> <button id="copyOrigin" class="small">Copy</button><br>
+      Then under <b>Authorised redirect URIs</b> click <b>Add URI</b> and paste:<br><code id="redirect"></code> <button id="copyRedirect" class="small">Copy</button><br>
+      <span class="muted small">On a phone: tap Copy here, switch back to the Google tab, and paste.</span><br>Click <b>Create</b>.</li>
+      <li>Copy the <b>Client ID</b> it shows (it ends in <code>.apps.googleusercontent.com</code>) and paste it here:</li>
+    </ol>
+    <div class="row">
+      <input id="clientId" type="text" placeholder="xxxxxxxx.apps.googleusercontent.com" style="flex:1;min-width:220px">
+      <button id="saveClient" class="primary">Save</button>
+    </div>
+    <p class="muted small">When you sign in, Google will warn "Google hasn't verified this app". That's normal because it's your own private app. Click <b>Continue</b>.</p>
+  </section>
+
+  <section id="welcome" class="card hidden">
+    <h2>Ready</h2>
+    <p>Sign in with the Gmail account you want to clean. Nothing is sent anywhere except straight between this page and Google.</p>
+    <button id="signin2" class="primary">Sign in with Google</button>
+    <p class="small"><a href="#" id="resetClient">Change setup key</a></p>
+  </section>
+
+  <!-- APP -->
+  <div id="app" class="hidden">
+    <section class="card">
+      <h2>Safety</h2>
+      <label class="chk"><input type="checkbox" id="keepStarred" checked> Never touch starred or important emails</label>
+      <p class="muted small" style="margin:8px 0 0">Everything goes to <b>Trash</b>, not deleted forever. You can undo right after, and Gmail empties Trash on its own after 30 days.</p>
+    </section>
+
+    <section class="card">
+      <h2>Quick clean</h2>
+      <div class="grid" id="quickGrid"></div>
+    </section>
+
+    <section class="card">
+      <h2>Who sends you the most?</h2>
+      <div class="row">
+        <select id="scanSize" style="width:auto">
+          <option value="500">Look at last 500 emails</option>
+          <option value="1000" selected>Look at last 1,000 emails</option>
+          <option value="2500">Look at last 2,500 emails</option>
+          <option value="5000">Look at last 5,000 emails</option>
+        </select>
+        <button id="scanBtn" class="primary">Find top senders</button>
+      </div>
+      <div id="scanStatus" class="muted small" style="margin-top:8px"></div>
+      <div class="progress hidden" id="scanProg"><div></div></div>
+      <div id="senderWrap" class="hidden" style="margin-top:10px">
+        <div class="row" style="justify-content:space-between">
+          <input id="senderFilter" type="text" placeholder="Filter by name or address" style="flex:1;min-width:200px">
+          <button id="selAll" class="small">Select all shown</button>
+          <button id="selNone" class="small">Clear</button>
+        </div>
+        <table class="senders" id="senderTable"></table>
+        <div class="bar row" style="justify-content:space-between">
+          <span id="selInfo" class="muted small">Nothing selected</span>
+          <button id="trashSenders" class="danger" disabled>Trash all mail from selected</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Custom search</h2>
+      <p class="muted small" style="margin-top:0">Same as the Gmail search bar. Examples: <code>from:amazon</code> <code>older_than:2y</code> <code>larger:10M</code> <code>has:attachment older_than:1y</code></p>
+      <div class="row">
+        <input id="customQ" type="text" placeholder="e.g. from:linkedin.com older_than:6m" style="flex:1;min-width:220px">
+        <button id="customCount">Count</button>
+        <button id="customTrash" class="danger">Trash matches</button>
+      </div>
+      <div id="customStatus" class="muted small" style="margin-top:8px"></div>
+    </section>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h2 id="mTitle">Are you sure?</h2>
+    <p id="mBody"></p>
+    <div class="progress hidden" id="mProg"><div></div></div>
+    <div class="row" style="justify-content:flex-end;margin-top:14px">
+      <button id="mCancel">Cancel</button>
+      <button id="mOk" class="danger">Move to Trash</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"><span id="toastMsg"></span><button id="toastUndo" class="hidden">Undo</button></div>
+
+<script>
+const SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
+const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
+const QUICK = [
+  {name:'Promotions', q:'category:promotions', desc:'Sales, offers, marketing'},
+  {name:'Social', q:'category:social', desc:'Facebook, Instagram, etc.'},
+  {name:'Updates', q:'category:updates', desc:'Receipts, notifications, alerts'},
+  {name:'Forums', q:'category:forums', desc:'Groups and mailing lists'},
+  {name:'Newsletters', q:'unsubscribe -category:primary', desc:'Anything with an unsubscribe link'},
+  {name:'Older than 1 year', q:'older_than:1y', desc:'Everything over a year old'},
+  {name:'Unread, older than 1 month', q:'is:unread older_than:1m', desc:'Stuff you never opened'},
+  {name:'Big emails (over 10 MB)', q:'larger:10M', desc:'Frees up storage fastest'},
+];
+
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try{return localStorage.getItem(k)}catch(e){return null} },
+  set(k,v){ try{localStorage.setItem(k,v)}catch(e){} },
+  del(k){ try{localStorage.removeItem(k)}catch(e){} },
+};
+let token = null;
+let senders = [];       // [{email,name,count}]
+let selected = new Set();
+
+// ---------- setup / auth (redirect sign-in: works inside a home-screen app) ----------
+const REDIRECT = location.origin + location.pathname.replace(/index\.html$/,'');
+function show(id){ ['setup','welcome','app'].forEach(s=>$(s).classList.toggle('hidden', s!==id)); }
+function init(){
+  $('origin').textContent = location.origin;
+  $('redirect').textContent = REDIRECT;
+  // coming back from Google?
+  if(location.hash.includes('access_token=') || location.hash.includes('error=')){
+    const h = new URLSearchParams(location.hash.slice(1));
+    history.replaceState(null,'',REDIRECT);
+    if(h.get('error')){ toast(h.get('error')==='access_denied' ? 'Sign-in cancelled' : 'Sign-in failed: '+h.get('error')); }
+    else if(h.get('state') !== store.get('oauthState')){ toast('Sign-in failed, please try again'); }
+    else {
+      store.set('token', h.get('access_token'));
+      store.set('tokenExp', String(Date.now() + (+h.get('expires_in')||3600)*1000 - 60000));
+    }
+    store.del('oauthState');
+  }
+  if(!store.get('clientId')){ show('setup'); return; }
+  const t = store.get('token'), exp = +store.get('tokenExp')||0;
+  if(t && Date.now() < exp){ token = t; afterSignIn(); return; }
+  show('welcome');
+}
+function signIn(){
+  const state = Math.random().toString(36).slice(2)+Date.now().toString(36);
+  store.set('oauthState', state);
+  const p = new URLSearchParams({client_id:store.get('clientId'), redirect_uri:REDIRECT, response_type:'token',
+    scope:SCOPE, include_granted_scopes:'true', state, prompt:'select_account'});
+  location.href = 'https://accounts.google.com/o/oauth2/v2/auth?'+p;
+}
+function signedOut(msg){
+  token=null; store.del('token'); store.del('tokenExp');
+  $('who').textContent=''; $('signout').classList.add('hidden'); show('welcome');
+  if(msg) toast(msg);
+}
+async function afterSignIn(){
+  $('signout').classList.remove('hidden');
+  show('app');
+  try{ const p = await api('/profile'); $('who').textContent = p.emailAddress + ' · ' + p.messagesTotal.toLocaleString() + ' emails'; }catch(e){}
+  renderQuick();
+}
+$('saveClient').onclick = ()=>{
+  const v = $('clientId').value.trim();
+  if(!/\.apps\.googleusercontent\.com$/.test(v)){ toast('That doesn\'t look right. It should end in .apps.googleusercontent.com'); return; }
+  store.set('clientId', v); init();
+};
+function copy(t){ navigator.clipboard && navigator.clipboard.writeText(t); toast('Copied'); }
+$('copyOrigin').onclick = ()=>copy(location.origin);
+$('copyRedirect').onclick = ()=>copy(REDIRECT);
+$('resetClient').onclick = e=>{ e.preventDefault(); store.del('clientId'); $('clientId').value=''; show('setup'); };
+$('signin2').onclick = signIn;
+$('signout').onclick = ()=>{ if(token) fetch('https://oauth2.googleapis.com/revoke?token='+encodeURIComponent(token),{method:'POST'}).catch(()=>{}); signedOut(); };
+
+// ---------- Gmail API ----------
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function api(path, opts={}, tries=0){
+  const res = await fetch(API+path, {...opts, headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json',...(opts.headers||{})}});
+  if(res.status===401){ signedOut('Your sign-in ran out. Tap Sign in again.'); throw new Error('Signed out'); }
+  if((res.status===429 || res.status>=500) && tries<5){ await sleep(500*Math.pow(2,tries)+Math.random()*300); return api(path,opts,tries+1); }
+  if(!res.ok){ const t = await res.text(); throw new Error('Gmail error '+res.status+': '+t.slice(0,200)); }
+  return res.status===204 ? {} : res.json();
+}
+function fullQuery(q){
+  let s = q.trim();
+  if($('keepStarred').checked) s += ' -is:starred -is:important';
+  return s + ' -in:trash -in:spam';
+}
+// returns all message ids matching q (optionally capped)
+async function listIds(q, cap=Infinity, onProgress){
+  let ids=[], pageToken='';
+  do{
+    const p = new URLSearchParams({q:fullQuery(q), maxResults:'500'});
+    if(pageToken) p.set('pageToken', pageToken);
+    const r = await api('/messages?'+p);
+    (r.messages||[]).forEach(m=>ids.push(m.id));
+    pageToken = r.nextPageToken;
+    onProgress && onProgress(ids.length);
+  }while(pageToken && ids.length<cap);
+  return ids.slice(0,cap);
+}
+async function batchLabel(ids, add, remove, onProgress){
+  for(let i=0;i<ids.length;i+=1000){
+    await api('/messages/batchModify',{method:'POST',body:JSON.stringify({ids:ids.slice(i,i+1000),addLabelIds:add,removeLabelIds:remove})});
+    onProgress && onProgress(Math.min(i+1000,ids.length));
+  }
+}
+
+// ---------- confirm + trash + undo ----------
+function confirmTrash(title, body){
+  return new Promise(resolve=>{
+    $('mTitle').textContent = title; $('mBody').innerHTML = body;
+    $('mProg').classList.add('hidden'); $('mOk').disabled=false; $('mCancel').disabled=false;
+    $('modalBg').style.display='flex';
+    $('mOk').onclick = ()=>resolve(true);
+    $('mCancel').onclick = ()=>{ $('modalBg').style.display='none'; resolve(false); };
+  });
+}
+async function trashQuery(q, label){
+  let ids;
+  try{ toast('Counting…'); ids = await listIds(q); }catch(e){ toast(e.message); return null; }
+  hideToast();
+  if(!ids.length){ toast('Nothing to clean here 🎉'); return 0; }
+  const ok = await confirmTrash('Move '+ids.length.toLocaleString()+' emails to Trash?',
+    esc(label)+'<br><span class="muted small">You can undo this right after.</span>');
+  if(!ok) return null;
+  return doTrash(ids);
+}
+async function doTrash(ids){
+  $('mOk').disabled=true; $('mCancel').disabled=true;
+  $('mProg').classList.remove('hidden'); setProg('mProg',0);
+  try{
+    await batchLabel(ids, ['TRASH'], [], n=>setProg('mProg', n/ids.length));
+  }catch(e){ $('modalBg').style.display='none'; toast(e.message); return null; }
+  $('modalBg').style.display='none';
+  toast('Moved '+ids.length.toLocaleString()+' emails to Trash', async ()=>{
+    toast('Undoing…');
+    try{ await batchLabel(ids, [], ['TRASH']); toast('Restored '+ids.length.toLocaleString()+' emails'); renderQuick(); }
+    catch(e){ toast(e.message); }
+  });
+  return ids.length;
+}
+
+// ---------- quick clean ----------
+function renderQuick(){
+  const g = $('quickGrid'); g.innerHTML='';
+  QUICK.forEach(item=>{
+    const d = document.createElement('div'); d.className='quick';
+    d.innerHTML = `<b>${item.name}</b><span class="muted small">${item.desc}</span>
+      <span class="count muted">…</span>
+      <button class="danger">Move to Trash</button>`;
+    const countEl = d.querySelector('.count'), btn = d.querySelector('button');
+    const refresh = ()=> listIds(item.q, 10000).then(ids=>{
+        countEl.textContent = ids.length>=10000 ? '10,000+' : ids.length.toLocaleString();
+        countEl.classList.toggle('muted', !ids.length); btn.disabled = !ids.length;
+      }).catch(()=>{ countEl.textContent='?'; });
+    btn.onclick = async ()=>{ const n = await trashQuery(item.q, item.name); if(n) refresh(); };
+    g.appendChild(d); refresh();
+  });
+}
+
+// ---------- top senders ----------
+function parseFrom(v){
+  const m = v.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>/);
+  if(m) return {name:m[1].trim()||m[2], email:m[2].trim().toLowerCase()};
+  return {name:v.trim(), email:v.trim().toLowerCase()};
+}
+$('scanBtn').onclick = async ()=>{
+  const n = +$('scanSize').value;
+  $('scanBtn').disabled = true; $('scanProg').classList.remove('hidden'); setProg('scanProg',0);
+  $('scanStatus').textContent = 'Finding emails…';
+  try{
+    const ids = await listIds('', n);
+    const map = new Map(); let done=0;
+    const worker = async ()=>{
+      while(ids.length){
+        const id = ids.pop();
+        try{
+          const m = await api('/messages/'+id+'?format=metadata&metadataHeaders=From');
+          const h = (m.payload.headers||[]).find(h=>h.name.toLowerCase()==='from');
+          if(h){ const f=parseFrom(h.value); const s=map.get(f.email)||{email:f.email,name:f.name,count:0}; s.count++; map.set(f.email,s); }
+        }catch(e){}
+        done++; if(done%20===0){ setProg('scanProg', done/total); $('scanStatus').textContent='Reading '+done.toLocaleString()+' emails…'; }
+      }
+    };
+    const total = ids.length;
+    await Promise.all(Array.from({length:8}, worker));
+    senders = [...map.values()].sort((a,b)=>b.count-a.count);
+    selected.clear();
+    $('scanStatus').textContent = 'Looked at '+total.toLocaleString()+' emails from '+senders.length.toLocaleString()+' senders. Tick the ones you want gone. It will trash ALL their mail, not just these.';
+    $('senderWrap').classList.remove('hidden'); renderSenders();
+  }catch(e){ $('scanStatus').textContent = e.message; }
+  $('scanBtn').disabled = false; $('scanProg').classList.add('hidden');
+};
+function shownSenders(){
+  const f = $('senderFilter').value.trim().toLowerCase();
+  return senders.filter(s=>!f || s.email.includes(f) || s.name.toLowerCase().includes(f)).slice(0,300);
+}
+function renderSenders(){
+  const t = $('senderTable'); t.innerHTML='';
+  shownSenders().forEach(s=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="width:32px"><input type="checkbox" ${selected.has(s.email)?'checked':''}></td>
+      <td><div>${esc(s.name)}</div><div class="addr">${esc(s.email)}</div></td><td class="n">${s.count}</td>`;
+    const cb = tr.querySelector('input');
+    cb.onchange = ()=>{ cb.checked ? selected.add(s.email) : selected.delete(s.email); updSel(); };
+    tr.onclick = e=>{ if(e.target===cb) return; cb.checked=!cb.checked; cb.onchange(); };
+    t.appendChild(tr);
+  });
+  updSel();
+}
+function updSel(){
+  $('selInfo').textContent = selected.size ? selected.size+' sender'+(selected.size>1?'s':'')+' selected' : 'Nothing selected';
+  $('trashSenders').disabled = !selected.size;
+}
+$('senderFilter').oninput = renderSenders;
+$('selAll').onclick = ()=>{ shownSenders().forEach(s=>selected.add(s.email)); renderSenders(); };
+$('selNone').onclick = ()=>{ selected.clear(); renderSenders(); };
+$('trashSenders').onclick = async ()=>{
+  const list = [...selected];
+  // Gmail queries get long; chunk senders into groups
+  let ids = [];
+  toast('Counting…');
+  try{
+    for(let i=0;i<list.length;i+=20){
+      const q = '{' + list.slice(i,i+20).map(e=>'from:'+e).join(' ') + '}';
+      ids = ids.concat(await listIds(q));
+    }
+  }catch(e){ toast(e.message); return; }
+  hideToast();
+  ids = [...new Set(ids)];
+  if(!ids.length){ toast('Nothing found'); return; }
+  const names = list.slice(0,5).map(esc).join(', ') + (list.length>5?' and '+(list.length-5)+' more':'');
+  const ok = await confirmTrash('Move '+ids.length.toLocaleString()+' emails to Trash?', 'All mail from '+names+'.<br><span class="muted small">You can undo this right after.</span>');
+  if(!ok) return;
+  const n = await doTrash(ids);
+  if(n){ senders = senders.filter(s=>!selected.has(s.email)); selected.clear(); renderSenders(); renderQuick(); }
+};
+
+// ---------- custom ----------
+$('customCount').onclick = async ()=>{
+  const q = $('customQ').value.trim(); if(!q) return;
+  $('customStatus').textContent='Counting…';
+  try{ const ids = await listIds(q); $('customStatus').textContent = ids.length.toLocaleString()+' emails match.'; }
+  catch(e){ $('customStatus').textContent=e.message; }
+};
+$('customTrash').onclick = async ()=>{
+  const q = $('customQ').value.trim(); if(!q){ toast('Type a search first'); return; }
+  const n = await trashQuery(q, 'Search: '+q);
+  if(n){ $('customStatus').textContent='Done.'; renderQuick(); }
+};
+
+// ---------- helpers ----------
+function setProg(id,f){ $(id).firstElementChild.style.width = Math.round(Math.min(1,f)*100)+'%'; }
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let toastTimer;
+function toast(msg, undo){
+  clearTimeout(toastTimer);
+  $('toastMsg').textContent = msg; $('toast').style.display='flex';
+  $('toastUndo').classList.toggle('hidden', !undo);
+  $('toastUndo').onclick = ()=>{ $('toastUndo').classList.add('hidden'); undo(); };
+  toastTimer = setTimeout(hideToast, undo ? 15000 : 4000);
+}
+function hideToast(){ $('toast').style.display='none'; }
+
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+init();
+</script>
+</body>
+</html>
